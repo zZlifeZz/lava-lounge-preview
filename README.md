@@ -1,4 +1,4 @@
-# Lava Lounge — website concept
+# Lava Lounge: website concept
 
 A static, seven-page presentation project for a proposed lounge experience.
 
