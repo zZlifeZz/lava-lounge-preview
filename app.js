@@ -18,7 +18,7 @@ const BASE_MENU = [
  {id:'icedtea',name:'Peach iced tea',category:'zero',price:6,description:'Chilled tea with peach and lemon.'},
  {id:'coffee',name:'Coffee & conversation',category:'zero',price:5,description:'A freshly brewed coffee and a reason to pause.'}
 ];
-const CATEGORY_NAMES={all:'All the good things',food:'Food & sharing',cocktails:'Cocktails',beer:'Beer & wine',zero:'Zero proof'};
+const CATEGORY_NAMES={all:'The full menu',food:'Food & sharing',cocktails:'Cocktails',beer:'Beer & wine',zero:'Alcohol-free'};
 const MENU_KEY='lava-menu-draft-v1', PICKS_KEY='lava-menu-picks-v1';
 const $=(s,root=document)=>root.querySelector(s), $$=(s,root=document)=>[...root.querySelectorAll(s)];
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -34,6 +34,7 @@ function toast(text){const t=$('#toast');t.textContent=text;t.classList.add('sho
 const navButton=$('.nav-toggle'), nav=$('#site-nav');
 navButton?.addEventListener('click',()=>{const open=nav.classList.toggle('open');navButton.setAttribute('aria-expanded',String(open));navButton.setAttribute('aria-label',open?'Close navigation':'Open navigation')});
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&nav?.classList.contains('open')){nav.classList.remove('open');navButton.setAttribute('aria-expanded','false');navButton.setAttribute('aria-label','Open navigation');navButton.focus()}});
+document.addEventListener('click',e=>{if(nav?.classList.contains('open')&&!e.target.closest('.site-header')){nav.classList.remove('open');navButton.setAttribute('aria-expanded','false');navButton.setAttribute('aria-label','Open navigation')}});
 document.addEventListener('click',e=>{const b=e.target.closest('[data-close]');if(b)document.getElementById(b.dataset.close)?.close()});
 $$('dialog').forEach(d=>d.addEventListener('click',e=>{if(e.target===d){const r=d.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)d.close()}}));
 const heart='<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 5.5c-2-2-5.2-1.7-8 1.4C9.2 3.8 6 3.5 4 5.5c-3.1 3.2-.9 6.7 8 13.5 8.9-6.8 11.1-10.3 8-13.5Z" stroke="currentColor" stroke-width="1.3"/></svg>';
@@ -46,7 +47,7 @@ function renderMenu(){
  $('#menu-heading').textContent=CATEGORY_NAMES[category];$('#menu-results-count').textContent=`${list.length} ${list.length===1?"ITEM":"ITEMS"} · SAMPLE PRICES · CAD`;$('#menu-empty').hidden=list.length>0;updatePickCount();
  $$('.menu-filters button').forEach(b=>{const on=b.dataset.category===category;b.classList.toggle('active',on);b.setAttribute('aria-pressed',String(on))});
 }
-function togglePick(id){if(picks.has(id)){picks.delete(id);toast('Removed from your picks.')}else{picks.add(id);toast('Saved to your picks.')}writeStore(PICKS_KEY,[...picks]);renderMenu();renderPicks();const b=$('#detail-save');if(b){b.textContent=picks.has(id)?'Remove from my picks':'Save to my picks';b.setAttribute('aria-pressed',String(picks.has(id)))}}
+function togglePick(id){const item=menuData().find(i=>i.id===id);if(!item)return;if(picks.has(id)){picks.delete(id);toast('Removed from your picks.')}else{picks.add(id);toast('Saved to your picks.')}writeStore(PICKS_KEY,[...picks]);const selected=picks.has(id);const menuButton=$(`.pick-button[data-pick="${id}"]`);if(menuButton){menuButton.setAttribute('aria-pressed',String(selected));menuButton.setAttribute('aria-label',`${selected?'Remove':'Save'} ${item.name}`)}renderPicks();updatePickCount();const b=$('#detail-save');if(b&&b.dataset.pick===id){b.textContent=selected?'Remove from my picks':'Save to my picks';b.setAttribute('aria-pressed',String(selected))}}
 function openItem(id){const i=menuData().find(i=>i.id===id);if(!i)return;$('#item-detail').innerHTML=`<p class="eyebrow">${CATEGORY_NAMES[i.category]} · SAMPLE ITEM</p><h2>${esc(i.name)}</h2><p>${esc(i.description)}</p><div class="modal-price">${money(i.price)} <small class="sample-note">CAD · Sample price</small></div><p class="sample-note">Final ingredients and dietary information will be confirmed by the owner.</p><button id="detail-save" class="button button-dark" data-pick="${i.id}" aria-pressed="${picks.has(i.id)}" ${i.available?'':'disabled'}>${i.available?(picks.has(i.id)?'Remove from my picks':'Save to my picks'):'Unavailable in this preview'}</button>`;$('#item-dialog').showModal()}
 function renderPicks(){const box=$('#picks-items');if(!box)return;const items=menuData().filter(i=>picks.has(i.id));box.innerHTML=items.length?items.map(i=>`<div class="picks-row"><div><h3>${esc(i.name)}</h3><p>${money(i.price)}${i.available?'':' · Unavailable in preview'}</p></div><button class="picks-remove" data-remove="${i.id}" aria-label="Remove ${esc(i.name)} from picks">Remove</button></div>`).join(''):'<p class="empty-state">Nothing saved yet. Tap a heart on the menu to start your shortlist.</p>';$('#picks-total').innerHTML=items.length?`<div class="picks-estimate"><span>Sample subtotal</span><strong>${money(items.reduce((n,i)=>n+Number(i.price),0))} CAD</strong></div><p class="sample-note">One of each saved item. Illustrative prices, before any tax or tip. This is not a bill.</p>`:'';updatePickCount()}
 function refreshSavedState(){overrides=readStore(MENU_KEY,{});picks=new Set(readStore(PICKS_KEY,[]));renderMenu();renderPicks();refreshFeatured()}
@@ -55,10 +56,29 @@ window.addEventListener('storage',refreshSavedState);
 if(document.body.dataset.page==='menu'){
  const p=new URLSearchParams(location.search);const c=p.get('category');if(CATEGORY_NAMES[c])category=c;
  if(p.get('table')&&/^\d{1,3}$/.test(p.get('table'))){const t=$('#table-label');t.hidden=false;t.textContent='TABLE '+p.get('table').padStart(2,'0');document.body.classList.add('table-menu')}
- renderMenu();$('.menu-filters').addEventListener('click',e=>{const b=e.target.closest('[data-category]');if(b){category=b.dataset.category;renderMenu()}});
+ const syncCategory=()=>{const url=new URL(location.href);if(category==='all')url.searchParams.delete('category');else url.searchParams.set('category',category);history.replaceState(null,'',url)};
+ renderMenu();$('.menu-filters').addEventListener('click',e=>{const b=e.target.closest('[data-category]');if(b){category=b.dataset.category;renderMenu();syncCategory()}});
  $('#menu-search').addEventListener('input',e=>{query=e.target.value.trim().toLowerCase();renderMenu()});
+ $('#reset-filters')?.addEventListener('click',()=>{category='all';query='';$('#menu-search').value='';renderMenu();syncCategory();$('#menu-search').focus()});
  $('#open-picks').addEventListener('click',()=>{renderPicks();$('#picks-dialog').showModal()});
- document.addEventListener('click',e=>{const item=e.target.closest('[data-item]'),pick=e.target.closest('[data-pick]'),remove=e.target.closest('[data-remove]');if(item)openItem(item.dataset.item);if(pick&&!pick.disabled)togglePick(pick.dataset.pick);if(remove){picks.delete(remove.dataset.remove);writeStore(PICKS_KEY,[...picks]);renderMenu();renderPicks()}});
+ document.addEventListener('click',e=>{const item=e.target.closest('[data-item]'),pick=e.target.closest('[data-pick]'),remove=e.target.closest('[data-remove]');if(item)openItem(item.dataset.item);if(pick&&!pick.disabled)togglePick(pick.dataset.pick);if(remove){picks.delete(remove.dataset.remove);writeStore(PICKS_KEY,[...picks]);renderMenu();renderPicks();($('#picks-items [data-remove]')||$('#picks-dialog .dialog-close')).focus()}});
+}
+if(document.body.dataset.page==='home'){
+ const scenes={
+  lounge:{file:'loveseats.webp',alt:'Proposed loveseat seating with portable dividers',caption:'Conversation corner · Interior concept'},
+  games:{file:'games-music.webp',alt:'Concept showing one flexible area set up for board games and live music',caption:'Games & music · Flexible room concept'},
+  window:{file:'window-tables.webp',alt:'Proposed high tables and laptop seating by the front window',caption:'The window seats · Interior concept'}
+ };
+ $('.space-switches')?.addEventListener('click',e=>{const button=e.target.closest('[data-space]');if(!button)return;const scene=scenes[button.dataset.space];if(!scene)return;const img=$('.space-scene-image');img.src=new URL(scene.file,img.src).href;img.alt=scene.alt;img.style.objectFit=button.dataset.space==='games'?'contain':'cover';$('#space-caption').textContent=scene.caption;$$('[data-space]').forEach(b=>{const active=b===button;b.classList.toggle('active',active);b.setAttribute('aria-pressed',String(active))})});
+}
+if(document.body.dataset.page==='shisha'){
+ const profiles={
+  lemon:{name:'Lemon & mint',symbol:'LM',color:'#b9e6a4',description:'Sharp citrus peel meets a clean, cooling mint aroma.',tags:['Citrus','Cooling','Herbal']},
+  apple:{name:'Apple & anise',symbol:'AA',color:'#f1b38d',description:'Orchard-fruit sweetness with the distinctive, liquorice-like aroma of anise.',tags:['Orchard fruit','Sweet spice','Anise']},
+  grape:{name:'Grape & mint',symbol:'GM',color:'#c5b6ec',description:'Rounded dark-fruit notes contrast with a crisp, cooling mint aroma.',tags:['Dark fruit','Cooling','Rounded']},
+  berry:{name:'Mixed berries',symbol:'MB',color:'#efa6c0',description:'Tart red-fruit notes, a jammy aroma and a softer sweetness.',tags:['Tart fruit','Jammy','Sweet']}
+ };
+ $('.flavour-select')?.addEventListener('click',e=>{const button=e.target.closest('[data-flavour]');if(!button)return;const profile=profiles[button.dataset.flavour];if(!profile)return;$('[data-flavour-view]').style.setProperty('--flavour',profile.color);$('#flavour-symbol').textContent=profile.symbol;$('#flavour-name').textContent=profile.name;$('#flavour-description').textContent=profile.description;$('#flavour-tags').replaceChildren(...profile.tags.map(tag=>{const span=document.createElement('span');span.textContent=tag;return span}));$$('[data-flavour]').forEach(b=>{const active=b===button;b.classList.toggle('active',active);b.setAttribute('aria-pressed',String(active))});$('#flavour-announcement').textContent=profile.name+'. '+profile.description});
 }
 if(document.body.dataset.page==='events'){
  function filterEvents(type){$$('[data-event]').forEach(e=>e.hidden=type!=='all'&&e.dataset.event!==type);$$('[data-event-type]').forEach(b=>{const on=b.dataset.eventType===type;b.classList.toggle('active',on);b.setAttribute('aria-pressed',String(on))})}
